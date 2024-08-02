@@ -1,0 +1,15 @@
+{
+  "name": "youtube-but-better",
+  "version": "1.0.0",
+  "description": "This is a open-source kind of youtube backend",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [
+    "backend",
+    "js"
+  ],
+  "author": "Saurabh Rajmane",
+  "license": "ISC"
+}
