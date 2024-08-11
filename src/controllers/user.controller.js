@@ -4,19 +4,21 @@ import {User} from "../models/user.model.js"
 import {uploadOnCloudinary} from "../utils/cloudinary.js"
 import { ApiResponse } from "../utils/ApiResponse.js"
 
-const generateAccessAndRefreshToken = async(userId) => {
+const generateAccessAndRefreshToken = async(userId) =>{
    try {
-      const user = User.findOne(userId)
-      const accessToken = user.generateAccessToken()
-      const refreshToken = user.generateRefreshToken()
+       const user = await User.findById(userId)
+       const accessToken = user.generateAccessToken()
+       const refreshToken = user.generateRefreshToken()
+       
 
-      user.refreshToken = refreshToken
-      await user.save({ validateBeforesave: false })
+       user.refreshToken = refreshToken
+       await user.save({ validateBeforeSave: false })
 
-      return { accessToken, refreshToken }
+       return {accessToken, refreshToken}
+
 
    } catch (error) {
-      throw new ApiError(500, "something went wrong while generating access and refresh token")
+       throw new ApiError(500, "Something went wrong while generating referesh and access token")
    }
 }
  
@@ -100,8 +102,8 @@ const loginUser = asyncHandler( async (req, res) => {
    const {username, email, password} = req.body
 
    // username or email
-   if (!(username || email)) {
-      throw new ApiError(400, "username or email is required")
+   if (!username && !email) {
+      throw new ApiError(400, "username and email are required")
    }
 
    // find the user
@@ -121,6 +123,7 @@ const loginUser = asyncHandler( async (req, res) => {
 
    // genrate access and refresh token
    const {accessToken, refreshToken} = await generateAccessAndRefreshToken(user._id)
+   
 
    // send cookie
    const loggedInUser = await User.findOne(user._id).select("-password -refreshToken")
