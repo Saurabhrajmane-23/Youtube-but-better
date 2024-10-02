@@ -109,7 +109,7 @@ const loginUser = asyncHandler( async (req, res) => {
 
    // find the user
    const user = await User.findOne({
-      $or: [{username}, {email}]
+      $and: [{username}, {email}]
    })
 
    if (!user) {
@@ -133,6 +133,8 @@ const loginUser = asyncHandler( async (req, res) => {
       httpOnly: true,
       secure: true
    }
+   console.log(user);
+   
 
    return res
    .status(200)
@@ -239,7 +241,7 @@ const changeCurrentPassword = asyncHandler( async (req, res) => {
 
    return res
    .status(200)
-   .json(200, {}, "password changed successfully")
+   .json(new ApiResponse(200, {}, "password changed successfully"))
 
 
 })
@@ -248,9 +250,11 @@ const getCurrentUser = asyncHandler( async(req, res) => {
    return res
    .status(200)
    .json(
-      200,
-      req.user,
-      "current user fetched successfully"
+      new ApiResponse(
+         200,
+         req.user,
+         "current user fetched successfully"
+      )
    )
 })
 
@@ -290,8 +294,14 @@ const updateUserAvatar = asyncHandler(async(req, res) => {
       throw new ApiError(400, "Avatar is not generating url")
    }
 
-   const user = await User.findByIdAndUpdate(
-      req.user._id,
+   const user = await User.findById(req.user?._id)
+   if (!user) {
+      throw new ApiError(400, "User doesnt exist")
+   }
+   oldAvatarUrl = user.avatar
+
+   await User.findByIdAndUpdate(
+      req.user?._id,
       {
          $set: {
             avatar: avatar.url
@@ -300,9 +310,18 @@ const updateUserAvatar = asyncHandler(async(req, res) => {
       {new: true}
    ).select("-password")
 
+   // Extract the public_id from the old avatar URL
+   if (oldAvatarUrl) {
+      const oldPublicId = oldAvatarUrl.split('/').pop().split('.')[0];
+
+      // Delete the old avatar from Cloudinary
+      await cloudinary.uploader.destroy(oldPublicId);
+   }
+
+
    return res
    .status(200)
-   .json(200, user, "Avatar updated successfully")
+   .json(new ApiResponse(200, user, "Avatar updated successfully"))
 })
 
 const updateUserCoverImage = asyncHandler(async(req, res) => {
@@ -318,7 +337,13 @@ const updateUserCoverImage = asyncHandler(async(req, res) => {
       throw new ApiError(400, "coverImage is not generating url")
    }
 
-   const user = await User.findByIdAndUpdate(
+   const user = await User.findById(req.user?._id)
+   if (!user) {
+      throw new ApiError(400, "User doesnt exist")
+   }
+   oldCoverImageUrl = user.coverImage
+
+   await User.findByIdAndUpdate(
       req.user._id,
       {
          $set: {
@@ -328,9 +353,95 @@ const updateUserCoverImage = asyncHandler(async(req, res) => {
       {new: true}
    ).select("-password")
 
+   // Extract the public_id from the old avatar URL
+   if (oldCoverImageUrl) {
+      const oldPublicId = oldCoverImageUrl.split('/').pop().split('.')[0];
+
+      // Delete the old avatar from Cloudinary
+      await cloudinary.uploader.destroy(oldPublicId);
+   }
+
    return res
    .status(200)
-   .json(200, user, "coverImage updated successfully")
+   .json(new ApiResponse(200, user, "coverImage updated successfully"))
+})
+
+const getUserChannelProfile = asyncHandler(async(req, res) => {
+   const {username} = req.params
+
+   if (!username?.trim()) {
+      throw new ApiError(400, "Username is missing")
+   }
+
+   const channel = await User.aggregate([
+
+      {
+         $match: {
+            username: username.toLowerCase()
+         }
+      },
+      {
+         $lookup: {
+            from: "subscriptions",
+            localField: "_id",
+            foreignField: "channel",
+            as: "subscribers"
+         }
+      },
+      {
+         $lookup: {
+            from: "subscriptions",
+            localField: "_id",
+            foreignField: "subscriber",
+            as: "subscribedTo"
+         }
+      },
+      {
+         $addFields: {
+            subscribersCount: {
+               $size: "$subscribers"
+            },
+            channelsSubscribedToCount: {
+               $size: "$subscribedTo"
+            },
+            isSubscribed: {
+               $cond: {
+                  if: {
+                     $in: [req.user?._id, "$subscribers.subscriber"]
+                  },
+                  then: true,
+                  else: false
+               }
+            }
+         }
+      },
+      {
+         $project: {
+            username: 1,
+            fullName: 1,
+            subscribersCount: 1,
+            channelsSubscribedToCount: 1,
+            isSubscribed: 1,
+            avatar: 1,
+            coverImage: 1,
+            email: 1,
+            createdAt: 1 // added by me
+         }
+      }
+   ])
+
+   console.log(channel);
+
+   if (!channel?.length) {
+      throw new ApiError(404, "Channel doesnt exist")
+   }
+
+   return res
+   .status(200)
+   .json(
+      new ApiResponse(200, channel[0], "User channel fetched successfully")
+   )
+   
 })
 
 export { registerUser,
@@ -341,4 +452,5 @@ export { registerUser,
    getCurrentUser,
    updateUserDetails,
    updateUserAvatar,
-   updateUserCoverImage }
+   updateUserCoverImage,
+   getUserChannelProfile }
